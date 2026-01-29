@@ -1,0 +1,99 @@
+#library(DittoSeq)
+library(ggplot2)
+library(Seurat) 
+library(dplyr)
+library(sctransform)
+library(cowplot)
+library(BRETIGEA)
+library(knitr)
+library(stringr)
+library(patchwork)
+## Create Seurat Object
+library(Seurat)
+
+# Define the base path
+base_path <- "/Volumes/Huang-GCTA/nchen/center_runs/OY_counts/OY_2/"
+
+# Create an empty list to store Seurat objects
+seurat_list <- list()
+
+# Define sample names - ctrl
+sample_names <- c(
+  "PE4_ASO4_436",
+  "PE4_ASO4_441",
+  "PE4_ASO4_469",
+  "PE4_ASO4_1111",
+  "PE4_ASO4_1326",
+  "PE4_ASO4_1339",
+  "PE4_ASO75_438",
+  "PE4_ASO75_442",
+  "PE4_ASO75_466",
+  "PE4_ASO75_470",
+  "PE4_ASO75_475",
+  "PE4_ASO75_1121",
+  "PE4_NTC_134",
+  "PE4_NTC_410",
+  "PE4_NTC_424",
+  "PE4_NTC_426",
+  "PE4_NTC_432",
+  "PE4_NTC_455"
+)
+
+
+# Loop through each sample
+for (sample in sample_names) {
+  data_dir <- file.path(base_path, sample, "outs", "filtered_feature_bc_matrix")
+  counts <- Read10X(data.dir = data_dir)
+  seurat_obj <- CreateSeuratObject(counts = counts, project = sample)
+  seurat_list[[sample]] <- seurat_obj
+}
+# 3 groups
+PE4_ASO4 <- merge(x = seurat_list$PE4_ASO4_436, y = list(seurat_list$PE4_ASO4_441, seurat_list$PE4_ASO4_469,seurat_list$PE4_ASO4_1111,seurat_list$PE4_ASO4_1326,seurat_list$PE4_ASO4_1339), add.cell.ids = c("PE4_ASO4_436","PE4_ASO4_441","PE4_ASO4_469","PE4_ASO4_1111","PE4_ASO4_1326","PE4_ASO4_1339"))
+PE4_ASO4$group <- "PE4_ASO4"
+
+PE4_ASO75 <- merge(x = seurat_list$PE4_ASO75_438, y = list(seurat_list$PE4_ASO75_442, seurat_list$PE4_ASO75_466,seurat_list$PE4_ASO75_470,seurat_list$PE4_ASO75_475,seurat_list$PE4_ASO75_1121), add.cell.ids = c("PE4_ASO75_438","PE4_ASO75_442","PE4_ASO75_466","PE4_ASO75_470","PE4_ASO75_475","PE4_ASO75_1121"))
+PE4_ASO75$group <- "PE4_ASO75"
+
+PE4_NTC <- merge(x = seurat_list$PE4_NTC_134, y = list(seurat_list$PE4_NTC_410, seurat_list$PE4_NTC_424,seurat_list$PE4_NTC_426,seurat_list$PE4_NTC_432,seurat_list$PE4_NTC_455), add.cell.ids = c("PE4_NTC_134","PE4_NTC_410","PE4_NTC_424","PE4_NTC_426","PE4_NTC_432","PE4_NTC_455"))
+PE4_NTC$group <- "PE4_NTC"
+
+
+obj <- merge(PE4_ASO4, y= c(PE4_ASO75, PE4_NTC)) 
+
+
+## QC: remove poor quality cells and rarely expressed features
+mzl <- obj
+mzl$log10GenesPerUMI <- log10(mzl$nFeature_RNA) / log10(mzl$nCount_RNA)
+mzl$mitoRatio <- PercentageFeatureSet(object = mzl, pattern = "^mt-")
+
+# Create metadata dataframe
+metadata <- mzl@meta.data
+# Add cell IDs to metadata
+metadata$cells <- rownames(metadata)
+
+metadata <- metadata %>%
+  dplyr::rename(seq_folder = orig.ident,
+                nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+
+mzl<- subset(x = mzl, subset= (nCount_RNA >= 500) & 
+               (nFeature_RNA >= 200) & 
+               (log10GenesPerUMI > 0.85) & 
+               (mitoRatio < 0.25))
+
+
+counts <- GetAssayData(object = mzl, slot = "counts")
+nonzero <- counts > 0
+keep_genes <- Matrix::rowSums(nonzero) >= 10 
+filtered_counts <- counts[keep_genes, ]
+mzl <- CreateSeuratObject(filtered_counts, meta.data = mzl@meta.data)
+
+obj <- mzl
+options(future.globals.maxSize = 120 * 1024^3)  
+obj <- SCTransform(obj) %>%
+  RunPCA() %>%
+  FindNeighbors(dims = 1:15) %>%
+  FindClusters(resolution = 0.7) %>%
+  RunUMAP(dims = 1:15)
+
+
