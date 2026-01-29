@@ -51,7 +51,31 @@ new_meta$cell_type2<- gsub("1", "", new_meta$cell_type2)
 #add cell type annotation as metadata
 obj <-AddMetaData(obj, new_meta$cell_type2, col.name = 'cell_type_gen')
 table(obj$cell_type_gen)
+obj$Seurat_Clusters <- as.numeric(obj$seurat_clusters)
 
+
+
+
+#calculate % cell types
+cluster_celltype <- paste(obj$Seurat_Clusters, obj$cell_type_gen, sep = "_")
+group_celltype <- as.data.frame(table(cluster_celltype))
+library(tidyr)
+group_celltype <- group_celltype %>%
+  separate(cluster_celltype, c("cluster","celltype"), "_")
+library(reshape2)
+new <- dcast(group_celltype,cluster~celltype)
+rownames(new) <- new$cluster
+new$cluster <- NULL
+new[is.na(new)] <- 0
+new$max <- apply(new, 1, max, na.rm=TRUE)
+new$sum <- rowSums(new[,1:15])
+new$ratio <- (new$max / new$sum) *100
+new$cell_type<- names(new[, 1:15])[apply(new[, 1:15],1,which.max)]
+new$cluster <- row.names(new)
+write.csv(new, "/Users/lyao/Documents/OY/celltype_proj2.csv")
+
+
+####add celltype meta
 cluster_to_celltype <- c(
   "1"  = "Oligodendrocytes",
   "2"  = "Ex neuron (CA1)",
@@ -94,7 +118,3 @@ cluster_to_celltype <- c(
 )
 
 obj$celltype_group <- unname(cluster_to_celltype[as.character(obj$seurat_clusters)])
-
-
-
-obj$Seurat_Clusters <- as.numeric(obj$seurat_clusters)
