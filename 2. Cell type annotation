@@ -1,0 +1,100 @@
+## Cell type annotation
+
+setwd(dir = "/Users/lyao/Documents/OY")
+# for neuronal subtype identification in hippocampal samples
+Dentate.Gyrus<- list(c("Ntng1",  "Plk5",  "Tanc1", "Ahcyl2", "Slc4a4", "Rfx3", "Stxbp6", "Dgkh"))
+CA1.Pyramidal.Neurons<- list(c("Ccdc88c", "Galntl6", "Man1a", "Man1"))
+CA23.Pyramidal.Neurons<- list(c("Slit2"))
+CA3.Pyramidal.Neurons<- list(c("Trhde", "Rnf182", "Nectin3"))
+Interneurons<- list(c("Nxph1", "Grik1", "Sst", "Cnr1", "Vip", "Npas1"))
+Subiculum<- list(c("Tshz2", "Sgcz", "Meis2"))
+Oligodendrocytes<- list(c("Mbp",  "Plp1", "Mag"))
+OPC <- list(c("Vcan", "Pdgfra", "Arhgap31"))
+Microglia<- list(c("Arhgap45", "Ly86",  "Cd37"))
+Astrocytes<-list(c("Gfap", "Slc1a2",  "Atp1a2",  "Phkg1",   "Slc7a11", "Aldh1l1",  "Ranbp3l"))
+Fibroblast.like<- list(c("Slc38a2", "Mgp", "Sned1", "Slc6a13"))
+Choroid.Plexus<- list(c("Col9a3","Ttr","Htr2c","Folr1","Otx2"))
+Endothelial <- list(c("Csf1r"))
+Celltype <- c( "Astrocytes", "Microglia", "Fibroblast.like", "Oligodendrocytes", "OPC", "Choroid.Plexus","Dentate.Gyrus","CA1.Pyramidal.Neurons", "CA23.Pyramidal.Neurons", "CA3.Pyramidal.Neurons", "Interneurons", "Subiculum", "Endothelial")
+
+DefaultAssay(obj) <- "SCT"
+dataset2 <- obj
+library(stringr)
+for(key in Celltype){
+  dataset2<-AddModuleScore(object=dataset2, features = get(key), pool = NULL,  nbin = 24,  ctrl = 100,  k = FALSE,  assay = NULL, name = key,  seed = 1,  search = FALSE)
+}
+
+new_meta<- dataset2@meta.data
+colnames(new_meta)
+new_meta[is.na(new_meta)] <- 0
+new_meta$cell_type<- names(new_meta[, 11:23])[apply(new_meta[, 11:23],1,which.max)]
+table(new_meta$cell_type)
+#Max and second max
+new_meta$x1<- apply(new_meta[, 11:23], 1, max)
+new_meta$x2<- apply(new_meta[, 11:23], 1, function(x) x[order(x)[12]]) #in decreasing order
+
+new_meta$x1_x2<- (new_meta$x1 - new_meta$x2)/new_meta$x1
+new_meta$x1_x2 <- ifelse(
+  new_meta$x1 == 0 & new_meta$x2 == 0,    
+  0,                                         
+  ifelse(new_meta$x1_x2 < 0.1, 1, 0)        
+) 
+
+table(new_meta$x1_x2) #97765 0  5652 1 
+
+new_meta$cell_type2<- new_meta$cell_type
+new_meta$cell_type2<- ifelse(new_meta$x1_x2 == 1, "hybrid", new_meta$cell_type2 )
+new_meta$cell_type2<- ifelse(new_meta$x1 <= 0 , "negative", new_meta$cell_type2 )
+table(new_meta$cell_type2)
+
+new_meta$cell_type2<- gsub("1", "", new_meta$cell_type2)
+#add cell type annotation as metadata
+obj <-AddMetaData(obj, new_meta$cell_type2, col.name = 'cell_type_gen')
+table(obj$cell_type_gen)
+
+cluster_to_celltype <- c(
+  "1"  = "Oligodendrocytes",
+  "2"  = "Ex neuron (CA1)",
+  "3"  = "Ex neuron (DG)",
+  "4"  = "Ex neuron (DG)",
+  "5"  = "Oligodendrocytes",
+  "6"  = "Microglia",
+  "7"  = "Ex neuron (CA2/3)",
+  "8"  = "In neuron",
+  "9"  = "Ex neuron",
+  "10" = "Subiculum",
+  "11" = "In neuron",
+  "12" = "OPC",
+  "13" = "Astrocytes",
+  "14" = "Subiculum",
+  "15" = "In neuron",
+  "16" = "Ex neuron (CA2/3)",
+  "17" = "Subiculum",
+  "18" = "Subiculum",
+  "19" = "Choroid plexus",
+  "20" = "Subiculum",
+  "21" = "Microglia",
+  "22" = "Ex neuron (DG)",
+  "23" = "Unknown",
+  "24" = "Oligodendrocytes",
+  "25" = "Subiculum",
+  "26" = "In neuron",
+  "27" = "Ex neuron (CA1)",
+  "28" = "Ex neuron (CA2/3)",
+  "29" = "OPC",
+  "30" = "Ex neuron (CA2/3)",
+  "31" = "Ex neuron (DG)",
+  "32" = "Unknown",
+  "33" = "Subiculum",
+  "34" = "Ex neuron (CA1)",
+  "35" = "Unknown",
+  "36" = "Unknown",
+  "37" = "Ex neuron",
+  "38" = "OPC"
+)
+
+obj$celltype_group <- unname(cluster_to_celltype[as.character(obj$seurat_clusters)])
+
+
+
+obj$Seurat_Clusters <- as.numeric(obj$seurat_clusters)
