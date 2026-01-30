@@ -1,0 +1,51 @@
+obj<-obj1
+Idents(obj) <- "Seurat_Clusters"
+
+a <- as.data.frame(table(obj$orig.ident, obj$Seurat_Clusters))
+colnames(a) <- c("orig.ident", "cluster", "freq")
+new <- dcast(a,orig.ident~cluster)
+new$sum <- rowSums(new[ , 2:39])
+row.names(new) <- new$orig.ident
+new$orig.ident <- NULL
+b <-  new[, c(9,10,14,16,17,22,24,26,27,31,34,38)]/ new$sum
+b$group <- rownames(b)
+b <- b %>%
+  separate(group, into = c("group", "origID"),
+           sep = "_(?=[^_]+$)",  # split at last `_`
+           remove = TRUE,        # drop original col; set FALSE to keep it
+           extra = "merge", fill = "right")
+colnames(b) <- c("cluster09", "cluster10","cluster14","cluster16","cluster17","cluster22","cluster24","cluster26","cluster27","cluster31","cluster34","cluster38","group","origID")
+
+#write.csv(b, "/Users/lyao/Documents/OY/plots/proj2/Astrocytes/Astrocytes_Interested_cluster_prop.csv")
+df <- b
+df_long <- df %>%
+  pivot_longer(cols = starts_with("cluster"),
+               names_to = "cluster",
+               values_to = "frequency")
+library(ggplot2)
+df_long$group <- factor(df_long$group, levels = c("PE4_NTC", "PE4_ASO4", "PE4_ASO75"))
+custom_colors <- c(
+  "PE4_NTC" = "#a5a7ab",  # light lime green
+  "PE4_ASO4" = "#3c61a7",  # light coral red
+  "PE4_ASO75"    = "#4b7860"  # light sky blue
+)
+library(ggplot2)
+p<-ggplot(df_long, aes(x = group, y = frequency, fill = group)) +
+  geom_boxplot(outlier.shape = NA, color = "black", width = 0.6) +
+  geom_jitter(width = 0.15, size = 2, shape = 21, fill = "white") +
+  facet_wrap(~ cluster, scales = "free_y") +  # <-- per-cluster y-axis
+  scale_fill_manual(values = custom_colors) +
+  theme_minimal(base_size = 14) +
+  labs(y = "Proportion of cells per sample", x = NULL) +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold"),
+    panel.border = element_rect(color = "black", fill = NA)
+  )
+sz_in <- grDevices::dev.size("in")   # 以英寸计 c(width, height)
+sz_px <- grDevices::dev.size("px")   # 以像素计 c(width, height)
+dpi   <- sz_px[1] / sz_in[1] 
+ggplot2::ggsave("/Users/lyao/Documents/OY/plots/proj2/cell_proportion/ALL_cellprop_newcolor.pdf",
+                plot   = ggplot2::last_plot(),
+                width  = 18,
+                height = 12)
