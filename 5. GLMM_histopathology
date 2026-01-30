@@ -1,0 +1,215 @@
+library(dplyr)
+library(tidyr)
+library(lme4)
+require(magrittr)
+library(Seurat)
+library(ggplot2)
+
+Idents(obj) <- "cell_type_gen"
+obj <- subset(obj, ident= c("hybrid", "negative"), invert = TRUE)
+ata <- obj[[]]
+
+# Get all unique combinations of samples and clusters
+all_combinations <- expand_grid(
+  orig.ident = unique(all_metadata$orig.ident),
+  Seurat_Clusters = unique(all_metadata$Seurat_Clusters)
+)
+
+# Compute counts per sample and cluster
+counts_df <- all_metadata %>%
+  group_by(orig.ident) %>%
+  mutate(total_numbers_of_cells_per_sample = n()) %>%
+  group_by(orig.ident, Seurat_Clusters, .add = FALSE) %>%
+  summarise(number_of_cells_per_sample_in_cluster = n(), .groups = "drop") %>%
+  distinct()
+
+# Join with full combinations and fill in missing values
+smp_cluster_counts <- all_combinations %>%
+  left_join(counts_df, by = c("orig.ident", "Seurat_Clusters")) %>%
+  left_join(
+    all_metadata %>%
+      group_by(orig.ident, group) %>%
+      summarise(total_numbers_of_cells_per_sample = n(), .groups = "drop") %>%
+      distinct(),
+    by = "orig.ident"
+  ) %>%
+  mutate(
+    number_of_cells_per_sample_in_cluster = ifelse(is.na(number_of_cells_per_sample_in_cluster), 1, number_of_cells_per_sample_in_cluster)
+  )
+
+
+colnames(smp_cluster_counts)[c (1, 4, 2)] <- c("sample_id","animal_model","cluster_id")
+smp_cluster_counts <- smp_cluster_counts[order(smp_cluster_counts$cluster_id),]
+print(smp_cluster_counts)
+write.csv(smp_cluster_counts, "/Users/lyao/Documents/OY/csv_data/proj2/counts_per_sample_per_cluster_proj2_ASO4.csv")
+
+## input histology data
+#histop_HMGB1i <- read.csv(paste0(histodir,"PS19-fE_HMGB1_dInhibitor_snRNA-Seq_Cohort _03-24-22_Pathology_Quantifications_010222_noNA.csv"), header = T, check.names=F)
+histop_HMGB1i <- read.csv(file = "/Users/lyao/Documents/OY/csv_data/proj2/histology_Oscar2.csv")
+histop_HMGB1i$orig.ident <- paste("PE4", histop_HMGB1i$Group, histop_HMGB1i$Animal.., sep = "_")
+## input count data
+counts <- read.csv("/Users/lyao/Documents/OY/csv_data/proj2/In_neuron_counts_per_sample_per_cluster.csv", header = T)
+pheno <- unique(counts[, c("sample_id", "animal_model", "total_numbers_of_cells_per_sample")])
+Clusters <- unique(counts$cluster_id)
+colnames(histop_HMGB1i)[3] <- "sample_id"
+histopheno <- merge(histop_HMGB1i, pheno, by="sample_id") 
+head(histopheno)
+dim(histopheno)
+#log transformed the histo variables
+histopheno[,5:21]<- log(histopheno[,5:21])
+library(magrittr)
+##input function
+##function to estimate the change in the odds of cluster membership from the E4 to the other genotypes
+estimateCellStateChange <- function(k, counts, histopheno) {
+  require(lme4)
+  require(gdata)
+  print(paste("Cluster", k))
+  cluster_counts <- counts %>% 
+    filter(cluster_id == k)
+  cluster_counts %<>% merge(., histopheno, all.y=TRUE)
+  cluster_counts$number_of_cells_per_sample_in_cluster[is.na(cluster_counts$number_of_cells_per_sample_in_cluster)] <- 0
+  
+  cluster_counts %<>% arrange(animal_model) %>% mutate(proportion=number_of_cells_per_sample_in_cluster/total_numbers_of_cells_per_sample)
+  
+  
+  
+  colnames(cluster_counts)[10:26] <- c(  "Hippocampal.Volume"  ,                  "GFAP.Percent.Area",       "S100β Percent Area",      "IBA.Percent.Area..Gt",    "IBA1.Count..Gt" ,       
+                                         "IBA.Percent.Area..Rb."      ,           "IBA1.Count..RB"         ,              "CD68.Percent.Area",        "CD68.Count",              "HMGB1..DG.. Mean Intensity"     ,  
+                                         "HMGB1..CA1.. Mean Intensity"   ,    "HMGB1..CA3..Mean Intensity"     ,  "AT8.Percent.Area"  ,      "Ctx.Relative.APOE.Expression " ,        
+                                         "Hippocampal.APOE Percent.Area"   ,      "Hippocampal.APOE.in.Astrocytes"  ,      "Hippocampal.APOE.in.Neurons"   )
+  cluster_counts %<>% mutate(animal_model = as.factor(animal_model))
+  cluster_counts$animal_model <- relevel(cluster_counts$animal_model, ref="PE4_NTC")
+  
+  TempRes<-NULL
+  
+  for (ph in 10:(ncol(cluster_counts)-1)){
+    formula1=as.formula(paste0("cbind(number_of_cells_per_sample_in_cluster, ",
+                               "total_numbers_of_cells_per_sample - ",
+                               "number_of_cells_per_sample_in_cluster) ~ ",
+                               "(1 | animal_model/sample_id) + cluster_counts[,ph] "))
+    glmerFit <- glmer(formula1 ,data = cluster_counts, family = binomial, nAGQ=1)
+    
+    sglmerFit1 <- summary(glmerFit)
+    TempRes1 <- (sglmerFit1$coefficients[-1,])
+    
+    #print(TempRes1)
+    TempRes <- rbind(TempRes, TempRes1)
+  }  
+  
+  print(TempRes)
+  
+}
+
+##
+#run the log odds function for all clusters for each histopathological variable
+ClusterRes <- sapply(Clusters, estimateCellStateChange, counts, histopheno)
+
+#reformat the results table
+ClusterRes %<>% 
+  as.data.frame() %>% 
+  t() 
+row.names(ClusterRes) <-  paste0("Cluster", Clusters)
+ClusterRes <- data.frame(ClusterRes)
+
+write.csv(ClusterRes, "ClusterRes_In_check.csv")
+
+colnames(ClusterRes)[c(1:34, 52:68)] <- c(
+  "logOddsRatio_for_unit_Hippocampal_Volume",
+  "logOddsRatio_for_unit_GFAP_Percent_Area",
+  "logOddsRatio_for_unit_S100β_Percent_Area",
+  "logOddsRatio_for_unit_IBA_Percent_Area_Gt",
+  "logOddsRatio_for_unit_IBA1_Count_Gt",
+  "logOddsRatio_for_unit_IBA_Percent_Area_Rb",
+  "logOddsRatio_for_unit_IBA1_Count_Rb",
+  "logOddsRatio_for_unit_CD68_Percent_Area",
+  "logOddsRatio_for_unit_CD68_Count",
+  "logOddsRatio_for_unit_HMGB1_DG_Mean_Intensity",
+  "logOddsRatio_for_unit_HMGB1_CA1_Mean_Intensity",
+  "logOddsRatio_for_unit_HMGB1_CA3_Mean_Intensity",
+  "logOddsRatio_for_unit_AT8_Percent_Area",
+  "logOddsRatio_for_unit_Ctx_Relative_APOE_Expression",
+  "logOddsRatio_for_unit_Hippocampal_APOE_Percent_Area",
+  "logOddsRatio_for_unit_Hippocampal_APOE_in_Astrocytes",
+  "logOddsRatio_for_unit_Hippocampal_APOE_in_Neurons",
+  "StdErr_for_unit_Hippocampal_Volume",
+  "StdErr_for_unit_GFAP_Percent_Area",
+  "StdErr_for_unit_S100β_Percent_Area",
+  "StdErr_for_unit_IBA_Percent_Area_Gt",
+  "StdErr_for_unit_IBA1_Count_Gt",
+  "StdErr_for_unit_IBA_Percent_Area_Rb",
+  "StdErr_for_unit_IBA1_Count_Rb",
+  "StdErr_for_unit_CD68_Percent_Area",
+  "StdErr_for_unit_CD68_Count",
+  "StdErr_for_unit_HMGB1_DG_Mean_Intensity",
+  "StdErr_for_unit_HMGB1_CA1_Mean_Intensity",
+  "StdErr_for_unit_HMGB1_CA3_Mean_Intensity",
+  "StdErr_for_unit_AT8_Percent_Area",
+  "StdErr_for_unit_Ctx_Relative_APOE_Expression",
+  "StdErr_for_unit_Hippocampal_APOE_Percent_Area",
+  "StdErr_for_unit_Hippocampal_APOE_in_Astrocytes",
+  "StdErr_for_unit_Hippocampal_APOE_in_Neurons",
+  "pvalue_for_unit_Hippocampal_Volume",
+  "pvalue_for_unit_GFAP_Percent_Area",
+  "pvalue_for_unit_S100β_Percent_Area",
+  "pvalue_for_unit_IBA_Percent_Area_Gt",
+  "pvalue_for_unit_IBA1_Count_Gt",
+  "pvalue_for_unit_IBA_Percent_Area_Rb",
+  "pvalue_for_unit_IBA1_Count_Rb",
+  "pvalue_for_unit_CD68_Percent_Area",
+  "pvalue_for_unit_CD68_Count",
+  "pvalue_for_unit_HMGB1_DG_Mean_Intensity",
+  "pvalue_for_unit_HMGB1_CA1_Mean_Intensity",
+  "pvalue_for_unit_HMGB1_CA3_Mean_Intensity",
+  "pvalue_for_unit_AT8_Percent_Area",
+  "pvalue_for_unit_Ctx_Relative_APOE_Expression",
+  "pvalue_for_unit_Hippocampal_APOE_Percent_Area",
+  "pvalue_for_unit_Hippocampal_APOE_in_Astrocytes",
+  "pvalue_for_unit_Hippocampal_APOE_in_Neurons")
+
+
+
+p.adjust_all <- p.adjust(c(ClusterRes$pvalue_for_unit_Hippocampal_Volume,
+                           ClusterRes$pvalue_for_unit_GFAP_Percent_Area,
+                           ClusterRes$pvalue_for_unit_S100β_Percent_Area,
+                           ClusterRes$pvalue_for_unit_IBA_Percent_Area_Gt,
+                           ClusterRes$pvalue_for_unit_IBA1_Count_Gt,
+                           ClusterRes$pvalue_for_unit_IBA_Percent_Area_Rb,
+                           ClusterRes$pvalue_for_unit_IBA1_Count_Rb,
+                           ClusterRes$pvalue_for_unit_CD68_Percent_Area,
+                           ClusterRes$pvalue_for_unit_CD68_Count,
+                           ClusterRes$pvalue_for_unit_HMGB1_DG_Mean_Intensity,
+                           ClusterRes$pvalue_for_unit_HMGB1_CA1_Mean_Intensity,
+                           ClusterRes$pvalue_for_unit_HMGB1_CA3_Mean_Intensity,
+                           ClusterRes$pvalue_for_unit_AT8_Percent_Area,
+                           ClusterRes$pvalue_for_unit_Ctx_Relative_APOE_Expression,
+                           ClusterRes$pvalue_for_unit_Hippocampal_APOE_Percent_Area,
+                           ClusterRes$pvalue_for_unit_Hippocampal_APOE_in_Astrocytes,
+                           ClusterRes$pvalue_for_unit_Hippocampal_APOE_in_Neurons), method = "BH")
+
+
+##perform multiple-testing correction
+ClusterRes[,"p.adjust_for_unit_Hippocampal_Volume"] = p.adjust_all[1:nrow(ClusterRes)]
+ClusterRes[,"p.adjust_for_unit_GFAP_Percent_Area"] = p.adjust_all[(nrow(ClusterRes) + 1):(nrow(ClusterRes)*2)]
+ClusterRes[,"p.adjust_for_unit_S100β_Percent_Area"] = p.adjust_all[(nrow(ClusterRes)*2 + 1):(nrow(ClusterRes)*3)]
+ClusterRes[,"p.adjust_for_unit_IBA_Percent_Area_Gt"] = p.adjust_all[(nrow(ClusterRes)*3 + 1):(nrow(ClusterRes)*4)]
+ClusterRes[,"p.adjust_for_unit_IBA1_Count_Gt"] = p.adjust_all[(nrow(ClusterRes)*4 + 1):(nrow(ClusterRes)*5)]
+ClusterRes[,"p.adjust_for_unit_IBA1_Percent_Area_Rb"] = p.adjust_all[(nrow(ClusterRes)*5 + 1):(nrow(ClusterRes)*6)]
+ClusterRes[,"p.adjust_for_unit_IBA1_Count_Rb"] = p.adjust_all[(nrow(ClusterRes)*6 + 1):(nrow(ClusterRes)*7)]
+ClusterRes[,"p.adjust_for_unit_CD68_Percent_Area"] = p.adjust_all[(nrow(ClusterRes)*7 + 1):(nrow(ClusterRes)*8)]
+ClusterRes[,"p.adjust_for_unit_CD68_Count"] = p.adjust_all[(nrow(ClusterRes)*8 + 1):(nrow(ClusterRes)*9)]
+ClusterRes[,"p.adjust_for_unit_HMGB1_DG_Mean_Intensity"] = p.adjust_all[(nrow(ClusterRes)*9 + 1):(nrow(ClusterRes)*10)]
+ClusterRes[,"p.adjust_for_unit_HMGB1_CA1_Mean_Intensity"] = p.adjust_all[(nrow(ClusterRes)*10 + 1):(nrow(ClusterRes)*11)]
+ClusterRes[,"p.adjust_for_unit_HMGB1_CA3_Mean_Intensity"] = p.adjust_all[(nrow(ClusterRes)*11 + 1):(nrow(ClusterRes)*12)]
+ClusterRes[,"p.adjust_for_unit_AT8_Percent_Area_DAB_Round_2"] = p.adjust_all[(nrow(ClusterRes)*12 + 1):(nrow(ClusterRes)*13)]
+ClusterRes[,"p.adjust_for_unit_Ctx_Relative_APOE_Expression"] = p.adjust_all[(nrow(ClusterRes)*13 + 1):(nrow(ClusterRes)*14)]
+ClusterRes[,"p.adjust_for_unit_Hippocampal_APOE_Percent_Area"] = p.adjust_all[(nrow(ClusterRes)*14 + 1):(nrow(ClusterRes)*15)]
+ClusterRes[,"p.adjust_for_unit_Hippocampal_APOE_in_Astrocytes"] = p.adjust_all[(nrow(ClusterRes)*15 + 1):(nrow(ClusterRes)*16)]
+ClusterRes[,"p.adjust_for_unit_Hippocampal_APOE_in_Neurons"] = p.adjust_all[(nrow(ClusterRes)*16 + 1):length(p.adjust_all)]
+
+ClusterRes <- ClusterRes[,!(colnames(ClusterRes) %in% c("X35","X36","X37","X38","X39","X40", "X41","X42","X43","X44","X45","X46","X47","X48","X49","X50","X51"))]
+
+write.csv(t(ClusterRes), file = "In_log_odds_ratio_new_method_per_unit_per_histopathology_per_cluster_check.csv")
+
+
+
+
