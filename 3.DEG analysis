@@ -1,0 +1,214 @@
+#DEGs between main clusters
+obj<-obj1
+options(future.globals.maxSize = 100 * 1024^3) 
+
+DefaultAssay(obj) <- "SCT"
+
+#Cluster 16 vs Clusters 7 + 28 + 30.
+Idents(obj) <- "Seurat_Clusters"
+DEG.list <- FindMarkers(obj, ident.1= "16", ident.2 = c("7", "28","30"), verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "16 vs 7, 28, 30"
+DEG.list.FDR2<- DEG.list.FDR
+
+#Cluster 22 vs Clusters 3 + 4
+Idents(obj) <- "Seurat_Clusters"
+DEG.list <- FindMarkers(obj, ident.1= "22", ident.2 = c("3", "4"), verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "22 vs 3, 4"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+#Cluster 24 vs Clusters 1 + 5
+Idents(obj) <- "Seurat_Clusters"
+DEG.list <- FindMarkers(obj, ident.1= "24", ident.2 = c("1", "5"), verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "24 vs1, 5"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+#Cluster 27 vs Clusters 2 + 34
+Idents(obj) <- "Seurat_Clusters"
+DEG.list <- FindMarkers(obj, ident.1= "27", ident.2 = c("2", "34"), verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "27 vs 2, 34"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+#Cluster 31 vs Clusters 3 + 4.
+Idents(obj) <- "Seurat_Clusters"
+DEG.list <- FindMarkers(obj, ident.1= "31", ident.2 = c("3", "4"), verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "31 vs 3, 4"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+#Cluster 38 vs Clusters 12 + 29.
+Idents(obj) <- "Seurat_Clusters"
+DEG.list <- FindMarkers(obj, ident.1= "38", ident.2 = c("12", "29"), verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "38 vs 12, 29"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+table(DEG.list.FDR2$comparison)
+
+
+######################DEG between groups#################################################
+obj <- subset(obj1, subset = Seurat_Clusters %in% c(16, 22, 24, 27, 31, 38))
+DimPlot(obj, reduction = "umap", label=TRUE, repel = TRUE, group.by = "Seurat_Clusters",  raster=FALSE)
+DimPlot(obj1, reduction = "umap", label=TRUE, repel = TRUE, group.by = "Seurat_Clusters",  raster=FALSE)
+DefaultAssay(obj1) <- "SCT"
+#16######################
+obj16 <- subset(obj1, subset = Seurat_Clusters %in% c(16))
+DefaultAssay(obj16) <- "SCT"
+Idents(obj16) <- "group"
+DEG.list <- FindMarkers(obj16, ident.1= "PE4_ASO4", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster16 PE4_ASO4 vs PE4_NTC"
+DEG.list.FDR2<- DEG.list.FDR
+
+Idents(obj16) <- "group"
+DEG.list <- FindMarkers(obj16, ident.1= "PE4_ASO75", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster16 PE4_ASO75 vs PE4-NTC"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+# 22####################
+obj22 <- subset(obj1, subset = Seurat_Clusters %in% c(22))
+DefaultAssay(obj22) <- "SCT"
+Idents(obj22) <- "group"
+DEG.list <- FindMarkers(obj22, ident.1= "PE4_ASO4", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster22 PE4_ASO4 vs PE4_NTC"
+
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+Idents(obj22) <- "group"
+DEG.list <- FindMarkers(obj22, ident.1= "PE4_ASO75", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster22 PE4_ASO75 vs PE4-NTC"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+#24####################
+obj24 <- subset(obj1, subset = Seurat_Clusters %in% c(24))
+DefaultAssay(obj24) <- "SCT"
+Idents(obj24) <- "group"
+DEG.list <- FindMarkers(obj24, ident.1= "PE4_ASO4", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster24 PE4_ASO4 vs PE4_NTC"
+
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+Idents(obj24) <- "group"
+DEG.list <- FindMarkers(obj24, ident.1= "PE4_ASO75", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster24 PE4_ASO75 vs PE4-NTC"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+
+#27###################
+
+obj27 <- subset(obj1, subset = Seurat_Clusters %in% c(27))
+DefaultAssay(obj27) <- "SCT"
+Idents(obj27) <- "group"
+DEG.list <- FindMarkers(obj27, ident.1= "PE4_ASO4", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster27 PE4_ASO4 vs PE4_NTC"
+
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+Idents(obj27) <- "group"
+DEG.list <- FindMarkers(obj27, ident.1= "PE4_ASO75", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster27 PE4_ASO75 vs PE4-NTC"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+#31##############
+obj31 <- subset(obj1, subset = Seurat_Clusters %in% c(31))
+DefaultAssay(obj31) <- "SCT"
+Idents(obj31) <- "group"
+DEG.list <- FindMarkers(obj31, ident.1= "PE4_ASO4", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster31 PE4_ASO4 vs PE4_NTC"
+
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+Idents(obj31) <- "group"
+DEG.list <- FindMarkers(obj31, ident.1= "PE4_ASO75", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster31 PE4_ASO75 vs PE4-NTC"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+#38##############
+obj38 <- subset(obj1, subset = Seurat_Clusters %in% c(38))
+DefaultAssay(obj38) <- "SCT"
+Idents(obj38) <- "group"
+DEG.list <- FindMarkers(obj38, ident.1= "PE4_ASO4", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster38 PE4_ASO4 vs PE4_NTC"
+
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+
+Idents(obj38) <- "group"
+DEG.list <- FindMarkers(obj38, ident.1= "PE4_ASO75", ident.2 = "PE4_NTC", verbose = FALSE, test.use = "wilcox", logfc.threshold = 0.01)
+DEG.list$gene <- row.names(DEG.list)
+DEG.list.FDR <- DEG.list
+DEG.list.FDR$dir<- ifelse(DEG.list.FDR$avg_log2 < 0, "neg","pos")
+DEG.list.FDR$comparison<- "cluster38 PE4_ASO75 vs PE4-NTC"
+
+DEG.list.FDR2<- rbind(DEG.list.FDR2, DEG.list.FDR)
+
+table(DEG.list.FDR2$comparison)
