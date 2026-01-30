@@ -1,4 +1,5 @@
 obj<-obj1
+
 Idents(obj) <- "Seurat_Clusters"
 
 a <- as.data.frame(table(obj$orig.ident, obj$Seurat_Clusters))
