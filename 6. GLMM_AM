@@ -1,0 +1,123 @@
+#log olds ratio test for Astrocytes
+library(lme4)
+library(dplyr)
+require(magrittr)
+library(Seurat)
+library(ggplot2)
+library(tidyr)
+
+all_metadata <- obj[[]]
+# Get all unique combinations of samples and clusters
+all_combinations <- expand_grid(
+  orig.ident = unique(all_metadata$orig.ident),
+  Seurat_Clusters = unique(all_metadata$Seurat_Clusters)
+)
+# Compute counts per sample and cluster
+counts_df <- all_metadata %>%
+  group_by(orig.ident) %>%
+  mutate(total_numbers_of_cells_per_sample = n()) %>%
+  group_by(orig.ident, Seurat_Clusters, .add = FALSE) %>%
+  summarise(number_of_cells_per_sample_in_cluster = n(), .groups = "drop") %>%
+  distinct()
+# Join with full combinations and fill in missing values
+smp_cluster_counts <- all_combinations %>%
+  left_join(counts_df, by = c("orig.ident", "Seurat_Clusters")) %>%
+  left_join(
+    all_metadata %>%
+      group_by(orig.ident, group) %>%
+      summarise(total_numbers_of_cells_per_sample = n(), .groups = "drop") %>%
+      distinct(),
+    by = "orig.ident"
+  ) %>%
+  mutate(
+    number_of_cells_per_sample_in_cluster = ifelse(is.na(number_of_cells_per_sample_in_cluster), 1, number_of_cells_per_sample_in_cluster)
+  )
+colnames(smp_cluster_counts)[c (1, 4, 2)] <- c("sample_id","animal_model","cluster_id")
+smp_cluster_counts <- smp_cluster_counts[order(smp_cluster_counts$cluster_id),]
+
+
+write.csv(smp_cluster_counts,
+          file = "plots/proj2/Astrocytes/Astrocytes_counts_per_sample_per_cluster_proj2.csv",
+          row.names = FALSE)
+counts <- read.csv("plots/proj2/Astrocytes/Astrocytes_counts_per_sample_per_cluster_proj2.csv", header = T)
+
+pheno <- counts %>%
+  select(sample_id, animal_model, total_numbers_of_cells_per_sample) %>%
+  unique()
+rownames(pheno) <- seq(1,nrow(pheno))
+Clusters <- unique(counts$cluster_id)
+##function to estimate the change in the odds of cluster membership from the E4 to the other genotypes
+estimateCellStateChange <- function(k, counts, pheno) {
+  require(lme4)
+  require(gdata)
+  print(paste("Cluster", k))
+  cluster_counts <- counts %>%
+    filter(cluster_id == k)
+  cluster_counts %<>% merge(., pheno, all.y=TRUE)
+  cluster_counts[is.na(cluster_counts$number_of_cells_per_sample_in_cluster),
+                 "number_of_cells_per_sample_in_cluster"] <- 0
+  cluster_counts %<>%
+    arrange(animal_model) %>%
+    mutate(proportion=
+             number_of_cells_per_sample_in_cluster/total_numbers_of_cells_per_sample)
+  ##plot proportion of cells per genotype
+  pdf(paste0("proportion_of_cells_per_genotype_cluster_",
+             k,
+             ".pdf"))
+  print(ggplot(cluster_counts,
+               aes(x=animal_model,
+                   y=((number_of_cells_per_sample_in_cluster+0.01)/total_numbers_of_cells_per_sample))) +
+          geom_boxplot(outlier.color = NA) +
+          geom_jitter(position=position_jitter(0.2)) +
+          scale_y_log10() +
+          ylab("proportion of cells per genotype"))
+  dev.off()
+  cluster_counts %<>% mutate(animal_model = as.factor(animal_model))
+  cluster_counts$animal_model <- relevel(cluster_counts$animal_model, ref="PE4_NTC")
+  print(paste("Levels (ref first):",
+              paste(levels(cluster_counts$animal_model), collapse = " | ")))
+  
+  formula1=as.formula(paste0("cbind(number_of_cells_per_sample_in_cluster, ",
+                             "total_numbers_of_cells_per_sample - ",
+                             "number_of_cells_per_sample_in_cluster) ~ ",
+                             "(1 | sample_id) + animal_model"))
+  glmerFit <- glmer(formula1 ,data = cluster_counts, family = binomial, nAGQ=10)
+  sglmerFit1 <- summary(glmerFit)
+  # PRINT 2: which rows are contrasts vs reference (their order is your comparison order)
+  coef_rows <- rownames(sglmerFit1$coefficients)
+  comp_rows <- grep("^animal_model", coef_rows, value = TRUE)
+  if (length(comp_rows) == 0) {
+    print("Comparisons vs PE4_NTC: none (only reference present?)")
+  } else {
+    print(paste("Comparisons vs PE4_NTC (in order):",
+                paste(comp_rows, collapse = " | ")))
+  }
+  TempRes1 <- (sglmerFit1$coefficients[-1,])
+  return(TempRes1)
+}
+#run the log odds function for all clusters
+ClusterRes <- sapply(Clusters, estimateCellStateChange, counts, pheno)
+#reformat the results table
+ClusterRes %<>%
+  as.data.frame() %>%
+  t()
+row.names(ClusterRes) <-  paste0("Cluster", Clusters)
+ClusterRes <- data.frame(ClusterRes)
+colnames(ClusterRes)[c(1:4, 7:8)] <- c("logOddsRatio_ASO4_vs_NTC",
+                                       "logOddsRatio_ASO75_vs_NTC",
+                                       "standardError_ASO4_vs_NTC",
+                                       "standardError_ASO75_vs_NTC",
+                                       "pvalue-ASO4_vs_NTC",
+                                       "pvalue-ASO75_vs_NTC")
+
+#subset for clusters of interest
+ClusterRes <- ClusterRes[c(1, 2, 4, 5, 6, 7, 8, 9),]
+# make a vector of all p-values and p.adjust for all p-values together
+p.adjust_all <- p.adjust(c(ClusterRes$`pvalue-ASO4_vs_NTC`, ClusterRes$`pvalue-ASO75_vs_NTC`), method = "BH")
+##perform multiple-testing correction
+ClusterRes[,"p.adjust-ASO4_vs_NTC"] = p.adjust_all[1:nrow(ClusterRes)]
+ClusterRes[,"p.adjust-ASO75_vs_NTC"] = p.adjust_all[(nrow(ClusterRes) + 1):(nrow(ClusterRes)*2)]
+##output the results
+ClusterRes <- ClusterRes[,!(colnames(ClusterRes) %in% c("X5","X6"))]
+print(ClusterRes)
+write.csv(ClusterRes, file = "plots/proj2/Astrocytes/Astrocytes_log_odds_ratio_cellproportion_proj2.csv")
